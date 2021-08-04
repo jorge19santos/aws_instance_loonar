@@ -145,7 +145,7 @@
         vpc_subnet_id: "{{ public_subnet.subnet.id }}"
         assign_public_ip: yes
         instance_tags:
-          Name: new_demo_template
+          Name: new_demo_template_loonar
       register: ec2info
 
     - name: Display the ec2info outpu
