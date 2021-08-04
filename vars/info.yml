@@ -1,0 +1,5 @@
+aws_id: AKIARISBL2DZWDYHG3WH
+aws_key: TC2dqfYEAahYgr/yslIYo8CfLWMAjLfZT9jnW02C
+ssh_keyname: terraform-aws
+aws_region: us-west-1
+remote_user: morpheus-api

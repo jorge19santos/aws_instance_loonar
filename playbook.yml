@@ -1,0 +1,153 @@
+---
+- name: AWS EC2 Automation playbbok
+  hosts: localhost
+  gather_facts: false
+
+  vars_files:
+    - vars/info.yml
+
+  tasks:
+    - name: create a VPC
+      ec2_vpc_net:
+        aws_access_key: "{{ aws_id }}"
+        aws_secret_key: "{{ aws_key }}"
+        region: "{{ aws_region }}"
+        name: Demo_Loonar_vpc_net
+        cidr_block: 10.0.0.0/16
+        tags:
+          module: ec2_vpc_net
+        tenancy: default
+      register: ansibleVPC
+
+    - name: Display the ansibleVPC output
+      debug:
+        var: ansibleVPC
+########################################################################
+
+    - name: Create a subnet
+      ec2_vpc_subnet:
+        aws_access_key: "{{ aws_id }}"
+        aws_secret_key: "{{ aws_key }}"
+        region: "{{ aws_region }}"
+        state: present
+        cidr: 10.0.0.0/16
+        vpc_id: "{{ ansibleVPC.vpc.id }}"
+        map_public: yes
+        tags:
+          Name: public_subnet
+      register: public_subnet
+
+
+    - name: Display the public_subnet output
+      debug:
+        var: public_subnet
+
+############################################################################
+
+    - name: Create an internet gateway
+      ec2_vpc_igw:
+        aws_access_key: "{{ aws_id }}"
+        aws_secret_key: "{{ aws_key }}"
+        region: "{{ aws_region }}"
+        state: present
+        vpc_id: "{{ ansibleVPC.vpc.id }}"
+        tags:
+          Name: ansibleVPC_IGW
+      register: ansibleVPC_IGW
+
+    - name: Display the ansibleVPC_IGW output
+      debug:
+        var: ansibleVPC_IGW
+
+###################################################################################
+
+    - name: Create a route table
+      ec2_vpc_route_table:
+        aws_access_key: "{{ aws_id }}"
+        aws_secret_key: "{{ aws_key }}"
+        region: "{{ aws_region }}"
+        state: present
+        vpc_id: "{{ ansibleVPC.vpc.id }}"
+        tags:
+          Name: rt_ansibleVPC_PublicSubnet
+        subnets:
+          - "{{ public_subnet.subnet.id }}"
+        routes:
+          - dest: 0.0.0.0/0
+            gateway_id: "{{ ansibleVPC_IGW.gateway_id }}"
+      register: rt_ansibleVPC_PublicSubnet
+
+    - name: Display the rt_ansibleVPC_public_subnet output
+      debug:
+        var: rt_ansibleVPC_PublicSubnet
+
+######################################################################################    
+
+    - name: Create a security group
+      ec2_group:
+        aws_access_key: "{{ aws_id }}"
+        aws_secret_key: "{{ aws_key }}"
+        region:  "{{ aws_region }}"
+        name: "Test Security Group"
+        description: "Test Security group"
+        vpc_id: "{{ ansibleVPC.vpc.id }}"
+        tags:
+          Name: Test Security Group
+        rules:
+          - proto: "tcp"
+            ports: "22"
+            cidr_ip: 0.0.0.0/0
+      register: my_vpc_sg
+
+    - name: Display the my_vpc_sg output
+      debug:
+        var: my_vpc_sg
+
+#######################################################################################    
+
+    - name: Find Red Hat AMIs
+      ec2_ami_info:
+        aws_access_key: "{{ aws_id }}"
+        aws_secret_key: "{{ aws_key }}"
+        region:  "{{ aws_region }}"
+        owners: 309956199498   #RED HAT OWNER ID
+        filters:
+          architecture: x86_64
+          name: RHEL-8*HVM-*
+      register: amis
+
+    - name: Dislay the amis output
+      debug:
+        var: amis
+
+    - name: Store latest version
+      set_fact:
+        latest_ami: "{{ amis.images | sort(attribute='creation_date') | last }}"
+
+    - name: Display the latest_ami_output
+      debug:
+        var: latest_ami    
+
+#############################################################################################
+
+    - name: Instance EC2 basic
+      ec2:
+        aws_access_key: "{{ aws_id }}"
+        aws_secret_key: "{{ aws_key }}"
+        region:  "{{ aws_region }}"
+        image: "{{ latest_ami.image_id }}"
+        instance_type: t2.micro
+        key_name: "{{ ssh_keyname }}"
+        count: 2
+        state: present
+        group_id: "{{ my_vpc_sg.group_id }}"
+        wait: yes
+        vpc_subnet_id: "{{ public_subnet.subnet.id }}"
+        assign_public_ip: yes
+        instance_tags:
+          Name: new_demo_template
+      register: ec2info
+
+    - name: Display the ec2info outpu
+      debug:
+        var: ec2info    
